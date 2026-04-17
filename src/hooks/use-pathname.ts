@@ -1,5 +1,5 @@
 import type { Seidr } from "@fimbul-works/seidr";
-import { getCurrentPath } from "../get-current-path";
+import { getUrl } from "../get-url.js";
 
 /**
  * Returns the current path as a derived Seidr.
@@ -7,4 +7,4 @@ import { getCurrentPath } from "../get-current-path";
  *
  * @returns {Seidr<string>} Derived Seidr of the current path
  */
-export const useLocation = (): Seidr<string> => getCurrentPath().as((path) => path);
+export const usePathname = (): Seidr<string> => getUrl().as((url) => url.pathname);

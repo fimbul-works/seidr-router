@@ -1,17 +1,27 @@
-import type { Component, Seidr } from "@fimbul-works/seidr";
-import { $, component, type SeidrChild, type SeidrElementProps, unwrapSeidr } from "@fimbul-works/seidr";
-import { useNavigate } from "../hooks";
+import {
+  $,
+  type Component,
+  component,
+  type Seidr,
+  type SeidrChild,
+  type SeidrElementProps,
+  unwrapSeidr,
+} from "@fimbul-works/seidr";
+import { useNavigate } from "../hooks/index.js";
 
 /**
  * Link component props.
  */
 export interface LinkProps<K extends keyof HTMLElementTagNameMap> {
+  /** The route to navigate to */
   to: string | Seidr<string>;
+  /** Optional HTML tag name (default: "a") */
   tagName?: K;
 }
 
 /**
  * Link component for Route.
+ *
  * @template K - Key from the HTMLElementTagNameMap interface
  * @param {LinkProps & SeidrElementProps<K>} props - Link props with reactive bindings
  * @param {SeidrChild | SeidrChild[]} [children] - Optional child nodes

@@ -1,7 +1,8 @@
 import { describeDualMode, enableClientMode } from "@fimbul-works/seidr/testing";
 import { beforeEach, expect, it, vi } from "vitest";
-import { getCurrentPath } from "../get-current-path";
 import { useNavigate } from "./use-navigate";
+import { useParams } from "./use-params";
+import { usePathname } from "./use-pathname";
 
 describeDualMode("useNavigate", ({ mode }) => {
   beforeEach(() => {
@@ -26,13 +27,14 @@ describeDualMode("useNavigate", ({ mode }) => {
   it("should update currentPath value", () => {
     const navigate = useNavigate();
     navigate("/about");
-    expect(getCurrentPath().value).toBe("/about");
+    expect(usePathname().value).toBe("/about");
   });
 
   it("should preserve query params and hashes", () => {
     const navigate = useNavigate();
     navigate("/about?foo=bar#baz");
-    expect(getCurrentPath().value).toBe("/about?foo=bar#baz");
+    expect(usePathname().value).toBe("/about?foo=bar");
+    expect(useParams().value).toEqual({ foo: "bar" });
   });
 
   if (mode !== "SSR") {

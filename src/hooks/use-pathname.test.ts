@@ -1,21 +1,21 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getCurrentPath } from "../get-current-path";
-import { useLocation } from "./use-location";
+import { initRouter } from "../init-router";
 import { useNavigate } from "./use-navigate";
+import { usePathname } from "./use-pathname";
 
-describe("useLocation", () => {
+describe("usePathname", () => {
   beforeEach(() => {
-    getCurrentPath().value = "/";
+    initRouter("/");
     window.history.replaceState(null, "", "/");
   });
 
   it("should return current path as a Seidr", () => {
-    const location = useLocation();
+    const location = usePathname();
     expect(location.value).toBe("/");
   });
 
   it("should be reactive when path changes", () => {
-    const location = useLocation();
+    const location = usePathname();
     const navigate = useNavigate();
 
     navigate("/about");
@@ -23,7 +23,7 @@ describe("useLocation", () => {
   });
 
   it("should be read-only (derived)", () => {
-    const location = useLocation();
+    const location = usePathname();
     expect(() => {
       location.value = "/forbidden";
     }).toThrow();

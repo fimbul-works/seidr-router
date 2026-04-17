@@ -1,6 +1,4 @@
-export const DUMMY_URL = "http://localhost/";
-export const PATH_DATA_KEY = "seidr.router.path";
-export const PATH_SEIDR_ID = "router-path";
-export const PARAMS_DATA_KEY = "seidr.router.params";
-export const PARAMS_SEIDR_ID = "router-params";
-export const HASH_SEIDR_ID = "router-hash";
+export const DATA_KEY_ROUTER = "seidr.router";
+export const DATA_KEY_ROUTER_URL = "seidr.router.url";
+export const DATA_KEY_ROUTER_TREE = "seidr.router.tree";
+export const DUMMY_BASE_URL = "https://fimbul.works";

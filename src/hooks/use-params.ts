@@ -1,5 +1,4 @@
-import type { Seidr } from "@fimbul-works/seidr";
-import { getCurrentParams } from "../get-current-params";
+import { Seidr } from "@fimbul-works/seidr";
 
 /**
  * Returns a derived Seidr of the parsed parameters for the current route.
@@ -7,4 +6,7 @@ import { getCurrentParams } from "../get-current-params";
  *
  * @returns {Seidr<Record<string, string>>} Derived Seidr of the current route parameters
  */
-export const useParams = (): Seidr<Record<string, string>> => getCurrentParams().as((params) => ({ ...params }));
+export const useParams = (): Seidr<Record<string, string>> => {
+  // TODO: impement
+  return new Seidr({});
+};

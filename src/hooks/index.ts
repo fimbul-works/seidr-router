@@ -1,6 +1,4 @@
-export { useHash } from "./use-hash";
-export { useLocation } from "./use-location";
-export { useNavigate } from "./use-navigate";
-export { useParams } from "./use-params";
-export { useRouter } from "./use-router";
-export { useSearchParams } from "./use-search-params";
+export { useNavigate } from "./use-navigate.js";
+export { useParams } from "./use-params.js";
+export { usePathname } from "./use-pathname.js";
+export { useSearchParams } from "./use-search-params.js";

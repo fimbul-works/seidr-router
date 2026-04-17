@@ -1,5 +1,4 @@
-import type { CleanupFunction } from "@fimbul-works/seidr";
-import { $, component } from "@fimbul-works/seidr";
+import { $, type CleanupFunction, component } from "@fimbul-works/seidr";
 import { renderToString } from "@fimbul-works/seidr/ssr";
 import { enableSSRMode } from "@fimbul-works/seidr/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -26,8 +25,8 @@ describe("Router SSR", () => {
       () =>
         Router(
           [
-            ["/", Home],
-            ["/about", About],
+            { path: "/", component: Home },
+            { path: "/about", component: About },
           ],
           Fallback,
         ),
@@ -45,8 +44,8 @@ describe("Router SSR", () => {
       () =>
         Router(
           [
-            ["/", Home],
-            ["/about", About],
+            { path: "/", component: Home },
+            { path: "/about", component: About },
           ],
           Fallback,
         ),
@@ -60,7 +59,7 @@ describe("Router SSR", () => {
   });
 
   it("should render fallback to string when no match", async () => {
-    const App = component(() => Router([["/", Home]], Fallback), "App");
+    const App = component(() => Router([{ path: "/", component: Home }], Fallback), "App");
 
     const { html } = await renderToString(App, { path: "/not-found" });
     expect(html).toContain('class="fallback"');
@@ -72,7 +71,7 @@ describe("Router SSR", () => {
       const params = useParams();
       return $("div", { className: "user", textContent: params.as((p: any) => `User ${p.id}`) });
     }, "User");
-    const App = component(() => Router([["/user/:id", User]], Fallback), "App");
+    const App = component(() => Router([{ path: "/user/:id", component: User }], Fallback), "App");
 
     const { html } = await renderToString(App, { path: "/user/123" });
     expect(html).toContain("User 123");
@@ -83,7 +82,7 @@ describe("Router SSR", () => {
       const params = useParams();
       return $("div", { className: "post", textContent: params.as((p: any) => `Post ${p.id}`) });
     }, "Post");
-    const App = component(() => Router([[/^\/post\/(?<id>\d+)$/, Post]], Fallback), "App");
+    const App = component(() => Router([{ path: /^\/post\/(?<id>\d+)$/, component: Post }], Fallback), "App");
 
     const { html } = await renderToString(App, { path: "/post/456" });
     expect(html).toContain("Post 456");
@@ -105,15 +104,15 @@ describe("Router SSR", () => {
   });
 
   it("should isolate path between SSR requests", async () => {
-    const AboutPage = component(() => $("div", { textContent: "About Page" }), "AboutPage");
     const HomePage = component(() => $("div", { textContent: "Home Page" }), "HomePage");
+    const AboutPage = component(() => $("div", { textContent: "About Page" }), "AboutPage");
 
     const App = component(
       () =>
         Router(
           [
-            ["/about", AboutPage],
-            ["/", HomePage],
+            { path: "/", component: HomePage },
+            { path: "/about", component: AboutPage },
           ],
           Fallback,
         ),
@@ -132,8 +131,8 @@ describe("Router SSR", () => {
     const App = component(
       () =>
         Router([
-          ["/", () => $("div", { textContent: "Home" })],
-          ["/about", () => $("div", { textContent: "About" })],
+          { path: "/", component: () => $("div", { textContent: "Home" }) },
+          { path: "/about", component: () => $("div", { textContent: "About" }) },
         ]),
       "App",
     );

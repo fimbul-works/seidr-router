@@ -17,6 +17,5 @@ export default defineConfig({
   },
   define: {
     __SEIDR_DEV__: true,
-    "process.env.USE_SCHEDULER": "false",
   },
 });

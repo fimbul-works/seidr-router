@@ -1,5 +1,5 @@
-import { getCurrentPath } from "./get-current-path";
-import { normalizePath } from "./normalize-path";
+import { getUrl } from "./get-url.js";
+import { normalizePath } from "./normalize-path.js";
 
 /**
  * Try to match pattern with path, and parse Route parameters.
@@ -13,7 +13,7 @@ export const parseRouteParams = <T extends Record<string, string> = Record<strin
   path?: string,
 ): T | false => {
   const parts = normalizePath(pattern).split("/");
-  const pathParts = normalizePath(path ?? getCurrentPath().value).split("/");
+  const pathParts = normalizePath(path ?? getUrl().value.pathname).split("/");
 
   // Ensure path and pattern have equal number of parts
   if (parts.length !== pathParts.length) {

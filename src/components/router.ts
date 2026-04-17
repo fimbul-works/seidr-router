@@ -1,17 +1,18 @@
-import type { Component, ComponentFactoryFunction, Seidr } from "@fimbul-works/seidr";
 import {
+  type Component,
+  type ComponentFactoryFunction,
   component,
   getLastNode,
   isFn,
   mountComponent,
   noHydrate,
+  type Seidr,
   useScope,
   wrapComponent,
   wrapSeidr,
 } from "@fimbul-works/seidr";
-import { getCurrentParams } from "../get-current-params";
-import { getCurrentPath } from "../get-current-path";
-import { matchRoute } from "../match-route";
+import { useParams, usePathname } from "../hooks/index.js";
+import { matchRoute } from "../match-route.js";
 import type { RouteDefinition } from "../types";
 
 /**
@@ -33,42 +34,30 @@ export const Router = <C extends ComponentFactoryFunction = ComponentFactoryFunc
     const routerComponent = useScope()!;
     const routes = wrapSeidr(routesProp, noHydrate);
     const fallback = wrapSeidr(fallbackProp, noHydrate);
-    const currentPath = getCurrentPath();
-    const currentParams = getCurrentParams();
+    const currentPath = usePathname();
+    const currentParams = useParams();
 
-    let currentRouteIndex = -100;
     let currentComponent: Component | undefined;
     let currentFactory: ComponentFactoryFunction | undefined;
+    let currentRouteIndex = -100;
 
-    const path = () => currentPath.value ?? "/";
-
-    const matchCurrentPath = (): { index: number; params: Record<string, string> | null } => {
-      const match = matchRoute(path(), routes.value);
+    const matchCurrentPath = (): { index: number; params: Record<string, string> } => {
+      const match = matchRoute(currentPath.value, routes.value);
       return match
         ? {
             index: match.index,
             params: match.params,
           }
-        : { index: -1, params: null };
+        : { index: -1, params: {} };
     };
 
-    const updateRouteTarget = (index: number, params: Record<string, string> | null) => {
-      currentRouteIndex = index;
-      if (params) {
-        currentParams.value = params;
-      } else {
-        currentParams.value = {};
-      }
-    };
-
-    const getMatchedFactory = (index: number) => {
-      return index > -1 ? routes.value[index][1] : isFn(fallback.value) ? fallback.value : undefined;
-    };
+    const getMatchedFactory = (index: number) =>
+      index > -1 ? routes.value[index].component : isFn(fallback.value) ? fallback.value : undefined;
 
     const updateComponent = (index: number) => {
       currentFactory = getMatchedFactory(index);
       if (currentFactory) {
-        currentComponent = wrapComponent(currentFactory, "Route")(undefined, routerComponent, path());
+        currentComponent = wrapComponent(currentFactory, "Route")(undefined, routerComponent, currentPath.value);
       } else {
         currentComponent = undefined;
       }
@@ -77,7 +66,7 @@ export const Router = <C extends ComponentFactoryFunction = ComponentFactoryFunc
     const { index: initialIndex, params: initialParams } = matchCurrentPath();
 
     if (initialIndex > -1 && initialParams) {
-      updateRouteTarget(initialIndex, initialParams);
+      currentRouteIndex = initialIndex;
     }
     updateComponent(currentRouteIndex);
 
@@ -94,7 +83,7 @@ export const Router = <C extends ComponentFactoryFunction = ComponentFactoryFunc
 
       // If route hasn't changed, only update params and skip re-render
       if (matchedFactory === currentFactory) {
-        updateRouteTarget(matchedIndex, matchedParams);
+        currentRouteIndex = matchedIndex;
         return;
       }
 
@@ -111,12 +100,11 @@ export const Router = <C extends ComponentFactoryFunction = ComponentFactoryFunc
 
       // Update index and parameters
       currentRouteIndex = matchedIndex;
-      updateRouteTarget(matchedIndex, matchedParams);
       updateComponent(matchedIndex);
 
       if (currentComponent) {
         routerComponent.addChild(currentComponent);
-        routerComponent.element = currentComponent; // Triggers robust sync
+        routerComponent.element = currentComponent;
         mountComponent(currentComponent, anchor, parent!);
       } else {
         routerComponent.element = undefined;

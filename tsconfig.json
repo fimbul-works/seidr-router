@@ -5,7 +5,7 @@
     "lib": ["ESNext", "DOM"],
     "types": ["node"],
     "moduleResolution": "Bundler",
-    "declaration": false,
+    "declaration": true,
     "allowJs": true,
     "strict": true,
     "esModuleInterop": true,
@@ -15,5 +15,5 @@
     "outDir": "./dist"
   },
   "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts", "src/test/**/*", "node_modules"]
+  "exclude": ["src/**/*.test.ts", "node_modules"]
 }

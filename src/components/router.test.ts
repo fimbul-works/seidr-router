@@ -2,19 +2,13 @@ import type { CleanupFunction } from "@fimbul-works/seidr";
 import { $, type ComponentFactoryFunction, component, mount, Seidr } from "@fimbul-works/seidr";
 import { describeDualMode } from "@fimbul-works/seidr/testing";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { getCurrentPath } from "../get-current-path";
 import { useNavigate } from "../hooks/use-navigate";
 import { useParams } from "../hooks/use-params";
+import { initRouter } from "../init-router";
+import type { RouteDefinition } from "../types";
 import { Router } from "./router";
 
-describeDualMode("Router Component", ({ getDocument, isSSR }) => {
-  if (isSSR) {
-    it("should be covered by router-ssr.test.ts", () => {
-      expect(true).toBe(true);
-    });
-    return;
-  }
-
+describeDualMode("Router Component", ({ getDocument }) => {
   let container: HTMLDivElement;
   let document: Document;
   let unmount: CleanupFunction;
@@ -23,7 +17,7 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
     document = getDocument();
     container = document.createElement("div");
     document.body.appendChild(container);
-    getCurrentPath().value = "/";
+    initRouter("/");
   });
 
   afterEach(() => {
@@ -46,8 +40,8 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
     const App = component(
       () =>
         Router([
-          ["/", Home],
-          ["/about", About],
+          { path: "/", component: Home },
+          { path: "/about", component: About },
         ]),
       "App",
     );
@@ -64,7 +58,7 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
   });
 
   it("should render fallback if no route matches", () => {
-    const App = component(() => Router([["/", Home]], Fallback), "App");
+    const App = component(() => Router([{ path: "/", component: Home }], Fallback), "App");
 
     const navigate = useNavigate();
     unmount = mount(App, container);
@@ -80,7 +74,7 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
   });
 
   it("should provide dynamic parameters to components via useParams", () => {
-    const App = component(() => Router([["/user/:id", User]]), "App");
+    const App = component(() => Router([{ path: "/user/:id", component: User }]), "App");
 
     const navigate = useNavigate();
     navigate("/user/123");
@@ -97,8 +91,8 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
     const App = component(
       () =>
         Router([
-          ["/admin/dashboard", component(() => $("div", { textContent: "Admin" }))],
-          ["/user/:id/edit", component(() => $("div", { textContent: "Edit User" }))],
+          { path: "/admin/dashboard", component: component(() => $("div", { textContent: "Admin" })) },
+          { path: "/user/:id/edit", component: component(() => $("div", { textContent: "Edit User" })) },
         ]),
       "App",
     );
@@ -117,13 +111,13 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
     const App = component(
       () =>
         Router([
-          [
-            /^\/post\/(?<id>\d+)$/,
-            component(() => {
+          {
+            path: /^\/post\/(?<id>\d+)$/,
+            component: () => {
               const params = useParams();
               return $("div", { textContent: params.as((p) => `Post ${p.id}`) });
-            }),
-          ],
+            },
+          },
         ]),
       "App",
     );
@@ -142,7 +136,7 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
     const CompA = component(() => $("div", { id: "comp-a", textContent: "Component A" }), "CompA");
     const CompB = component(() => $("div", { id: "comp-b", textContent: "Component B" }), "CompB");
 
-    const dynamicRoutes = new Seidr<import("../types").RouteDefinition[]>([["/a", CompA]]);
+    const dynamicRoutes = new Seidr<RouteDefinition[]>([{ path: "/a", component: CompA }]);
     const App = component(() => Router(dynamicRoutes), "App");
 
     const navigate = useNavigate();
@@ -153,15 +147,15 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
     expect(document.getElementById("comp-b")).toBeFalsy();
 
     dynamicRoutes.value = [
-      ["/a", CompA],
-      ["/b", CompB],
+      { path: "/a", component: CompA },
+      { path: "/b", component: CompB },
     ];
 
     // Router should automatically detect the new routes array and match /b
     expect(document.getElementById("comp-b")).toBeTruthy();
 
     const CompC = component(() => $("div", { id: "comp-c", textContent: "Component C" }), "CompC");
-    dynamicRoutes.value = [["/b", CompC]];
+    dynamicRoutes.value = [{ path: "/b", component: CompC }];
 
     // Router should automatically swap CompB with CompC at /b
     expect(document.getElementById("comp-b")).toBeFalsy();
@@ -188,8 +182,8 @@ describeDualMode("Router Component", ({ getDocument, isSSR }) => {
 
   it("should update element reference when navigating", () => {
     const r = Router([
-      ["/", Home],
-      ["/about", About],
+      { path: "/", component: Home },
+      { path: "/about", component: About },
     ]);
     const navigate = useNavigate();
     unmount = mount(() => r, container);

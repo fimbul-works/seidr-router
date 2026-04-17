@@ -1,11 +1,5 @@
-import { parseRouteParams } from "./parse-route-params";
-import type { RouteDefinition } from "./types";
-
-export interface RouteMatch {
-  route: RouteDefinition;
-  params: Record<string, string>;
-  index: number;
-}
+import { parseRouteParams } from "./parse-route-params.js";
+import type { RouteDefinition, RouteMatch } from "./types.js";
 
 /**
  * Matches a path against a list of routes.
@@ -15,23 +9,25 @@ export interface RouteMatch {
  * @returns The match result or null if no route matches
  */
 export const matchRoute = (rawPath: string, routes: RouteDefinition[]): RouteMatch | null => {
-  const path = rawPath.split(/[?#]/)[0];
-  for (let i = 0; i < routes.length; i++) {
-    const [pattern] = routes[i];
+  // Extract pathname from rawPath (remove query and hash)
+  const pathname = rawPath.split(/[?#]/)[0];
+
+  for (let index = 0; index < routes.length; index++) {
+    const { path: pattern } = routes[index];
     let params: Record<string, string> | false = false;
 
     if (pattern instanceof RegExp) {
-      const match = path.match(pattern);
+      const match = pathname.match(pattern);
       params = match ? (match.groups ? { ...match.groups } : {}) : false;
     } else {
-      params = parseRouteParams(pattern, path);
+      params = parseRouteParams(pattern, pathname);
     }
 
     if (params) {
       return {
-        route: routes[i],
-        params: params,
-        index: i,
+        index,
+        route: routes[index],
+        params,
       };
     }
   }

@@ -1,6 +1,5 @@
-import { isClient, isNum } from "@fimbul-works/seidr";
-import { DUMMY_URL } from "../constants";
-import { getCurrentPath } from "../get-current-path";
+import { isClient, isNum, SeidrError } from "@fimbul-works/seidr";
+import { getUrl } from "../get-url.js";
 
 /**
  * Interface for the navigate function.
@@ -14,9 +13,8 @@ export type NavigateFn = (to: string | number, replace?: boolean) => void;
  * @returns {NavigateFn} navigate function
  */
 export const useNavigate = (): NavigateFn => {
-  const currentPath = getCurrentPath();
-
   return (to: string | number, replace = false): void => {
+    // Backwards and forwards navigation
     if (isNum(to)) {
       if (isClient()) {
         window.history.go(to);
@@ -25,24 +23,21 @@ export const useNavigate = (): NavigateFn => {
     }
 
     // Handle string path
-    let targetPath = to;
+    const observable = getUrl();
+    const url = observable.value;
+    const nextUrl = new URL(to, url.href);
 
-    if (isClient()) {
-      // Resolve relative path using window.location as base
-      const url = new URL(to, window.location.href);
-      targetPath = url.pathname + url.search + url.hash;
-
-      if (targetPath !== window.location.pathname + window.location.search + window.location.hash) {
-        window.history[replace ? "replaceState" : "pushState"]({}, "", targetPath);
-      }
-    } else {
-      // Server-side: Resolve relative path using current path as base
-      // Use a dummy origin for URL resolution
-      const url = new URL(to, `${DUMMY_URL}${currentPath.value}`);
-      targetPath = url.pathname + url.search + url.hash;
+    if (nextUrl.origin !== url.origin) {
+      throw new SeidrError("Cross-origin navigation is not allowed");
     }
 
-    // Update the reactive path state
-    currentPath.value = targetPath;
+    observable.value = nextUrl;
+
+    // Handle client-side navigation
+    if (isClient()) {
+      if (nextUrl.href !== url.href) {
+        window.history[replace ? "replaceState" : "pushState"]({}, "", nextUrl.href);
+      }
+    }
   };
 };
