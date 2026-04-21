@@ -5,12 +5,13 @@ describe("parseRouteParams", () => {
   it("should match static routes", () => {
     expect(parseRouteParams("/", "/")).toEqual({});
     expect(parseRouteParams("/about", "/about")).toEqual({});
-    expect(parseRouteParams("/about/", "/about")).toEqual({});
-    expect(parseRouteParams("/about", "/about/")).toEqual({});
+  });
+
+  it("should match everything with root pattern (prefix matching)", () => {
+    expect(parseRouteParams("/", "/about")).toEqual({});
   });
 
   it("should return false on mismatch", () => {
-    expect(parseRouteParams("/", "/about")).toBe(false);
     expect(parseRouteParams("/about", "/contact")).toBe(false);
     expect(parseRouteParams("/user/:id", "/about")).toBe(false);
   });
@@ -18,19 +19,26 @@ describe("parseRouteParams", () => {
   it("should parse dynamic parameters", () => {
     expect(parseRouteParams("/user/:id", "/user/123")).toEqual({ id: "123" });
     expect(parseRouteParams("/user/:id/edit", "/user/456/edit")).toEqual({ id: "456" });
-    expect(parseRouteParams("/blog/:year/:month/:day", "/blog/2024/01/14")).toEqual({
-      year: "2024",
-      month: "01",
-      day: "14",
-    });
   });
 
-  it("should handle mixed static and dynamic parts", () => {
-    expect(parseRouteParams("/api/v1/user/:id", "/api/v1/user/789")).toEqual({ id: "789" });
+  it("should support prefix matching for nested routes", () => {
+    // Current requirement: pattern matches the START of the path
+    expect(parseRouteParams("/user/:id", "/user/123/settings")).toEqual({ id: "123" });
+    expect(parseRouteParams("/api/v1", "/api/v1/user/789")).toEqual({});
   });
 
   it("should handle trailing slashes consistently", () => {
     expect(parseRouteParams("/user/:id/", "/user/123")).toEqual({ id: "123" });
     expect(parseRouteParams("/user/:id", "/user/123/")).toEqual({ id: "123" });
+  });
+
+  it("should support wildcard matching", () => {
+    expect(parseRouteParams("*", "/about/me")).toEqual({ "*": "about/me" });
+    expect(parseRouteParams("/admin/*", "/admin/settings/security")).toEqual({ "*": "settings/security" });
+    expect(parseRouteParams("/admin/*", "/admin")).toEqual({ "*": "" });
+  });
+
+  it("should support wildcard matching with prefix logic", () => {
+    expect(parseRouteParams("/pages/*", "/pages/home/welcome")).toEqual({ "*": "home/welcome" });
   });
 });

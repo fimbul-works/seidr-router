@@ -1,26 +1,26 @@
-import { DUMMY_BASE_URL } from "../constants.js";
-import { useNavigate } from "./use-navigate.js";
-import { usePathname } from "./use-pathname.js";
+import type { Seidr } from "@fimbul-works/seidr";
+import { getRouterState } from "../get-router-state.js";
+import { initRouter } from "../init-router.js";
+import { browserRouter } from "../router/browser-router.js";
+import { getNearestRouter } from "../router-tree/get-nearest-router.js";
 
 /**
- * Hook to manage search parameters.
- * @returns {[Seidr<Record<string, string>>, (key: string, value: string) => void]}
- * A tuple with a derived Seidr of search params and a function to set them.
+ * Returns the current search parameters as a derived Seidr and a setter function.
+ *
+ * @returns {[Seidr<Record<string, string>>, (name: string, value: string) => void]} Tuple of [params, setParam]
  */
-export const useSearchParams = () => {
-  const location = usePathname();
-  const navigate = useNavigate();
+export const useSearchParams = (): [Seidr<Record<string, string>>, (name: string, value: string) => void] => {
+  initRouter();
 
-  const searchParams = location.as((path) => {
-    const url = new URL(path, DUMMY_BASE_URL);
-    return Object.fromEntries(url.searchParams.entries());
-  });
+  const routerState = getRouterState();
+  const node = getNearestRouter();
+  const router = node ? node.router : browserRouter();
 
-  const setParam = (key: string, value: string) => {
-    const url = new URL(location.value, DUMMY_BASE_URL);
-    url.searchParams.set(key, value);
-    navigate(url.pathname + url.search, true);
+  const setParam = (name: string, value: string) => {
+    const url = new URL(routerState.url.value.href);
+    url.searchParams.set(name, value);
+    router.push(url.pathname + url.search + url.hash);
   };
 
-  return [searchParams, setParam] as const;
+  return [router.searchParams.as((params) => params), setParam];
 };

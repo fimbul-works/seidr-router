@@ -3,9 +3,9 @@ import { $, type ComponentFactoryFunction, component, mount, Seidr } from "@fimb
 import { describeDualMode } from "@fimbul-works/seidr/testing";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { useNavigate } from "../hooks/use-navigate";
-import { useParams } from "../hooks/use-params";
+import { useRouteParams } from "../hooks/use-route-params";
 import { initRouter } from "../init-router";
-import type { RouteDefinition } from "../types";
+import type { Route } from "../types";
 import { Router } from "./router";
 
 describeDualMode("Router Component", ({ getDocument }) => {
@@ -22,13 +22,15 @@ describeDualMode("Router Component", ({ getDocument }) => {
 
   afterEach(() => {
     unmount?.();
-    document.body.removeChild(container);
+    if (container.parentNode) {
+      document.body.removeChild(container);
+    }
   });
 
   const Home = component(() => $("div", { id: "home", textContent: "Home Component" }), "Home");
   const About = component(() => $("div", { id: "about", textContent: "About Component" }), "About");
   const User = component(() => {
-    const params = useParams();
+    const params = useRouteParams();
     return $("div", {
       id: "user",
       textContent: params.as((p) => `User Component ${p.id}`),
@@ -40,7 +42,7 @@ describeDualMode("Router Component", ({ getDocument }) => {
     const App = component(
       () =>
         Router([
-          { path: "/", component: Home },
+          { path: "/", component: Home, exact: true },
           { path: "/about", component: About },
         ]),
       "App",
@@ -57,23 +59,30 @@ describeDualMode("Router Component", ({ getDocument }) => {
     expect(container.outerHTML).toContain("About Component");
   });
 
-  it("should render fallback if no route matches", () => {
-    const App = component(() => Router([{ path: "/", component: Home }], Fallback), "App");
+  it("should render wildcard route if no specific route matches", () => {
+    const App = component(
+      () =>
+        Router([
+          { path: "/", component: Home, exact: true },
+          { path: "*", component: Fallback },
+        ]),
+      "App",
+    );
 
     const navigate = useNavigate();
     unmount = mount(App, container);
     expect(document.getElementById("home")).toBeTruthy();
 
     navigate("/unknown");
-    expect(document.getElementById("home")).toBeFalsy();
-    expect(document.getElementById("fallback")).toBeTruthy();
+    expect(container.innerHTML).not.toContain('id="home"');
+    expect(container.innerHTML).toContain('id="fallback"');
 
     navigate("/");
-    expect(document.getElementById("fallback")).toBeFalsy();
-    expect(document.getElementById("home")).toBeTruthy();
+    expect(container.innerHTML).not.toContain('id="fallback"');
+    expect(container.innerHTML).toContain('id="home"');
   });
 
-  it("should provide dynamic parameters to components via useParams", () => {
+  it("should provide dynamic parameters to components via useRouterParams", () => {
     const App = component(() => Router([{ path: "/user/:id", component: User }]), "App");
 
     const navigate = useNavigate();
@@ -107,14 +116,14 @@ describeDualMode("Router Component", ({ getDocument }) => {
     expect(container.textContent).toContain("Edit User");
   });
 
-  it("should support RegExp patterns with useParams", () => {
+  it("should support RegExp patterns with useRouterParams", () => {
     const App = component(
       () =>
         Router([
           {
             path: /^\/post\/(?<id>\d+)$/,
             component: () => {
-              const params = useParams();
+              const params = useRouteParams();
               return $("div", { textContent: params.as((p) => `Post ${p.id}`) });
             },
           },
@@ -136,7 +145,7 @@ describeDualMode("Router Component", ({ getDocument }) => {
     const CompA = component(() => $("div", { id: "comp-a", textContent: "Component A" }), "CompA");
     const CompB = component(() => $("div", { id: "comp-b", textContent: "Component B" }), "CompB");
 
-    const dynamicRoutes = new Seidr<RouteDefinition[]>([{ path: "/a", component: CompA }]);
+    const dynamicRoutes = new Seidr<Route[]>([{ path: "/a", component: CompA }]);
     const App = component(() => Router(dynamicRoutes), "App");
 
     const navigate = useNavigate();
@@ -152,22 +161,22 @@ describeDualMode("Router Component", ({ getDocument }) => {
     ];
 
     // Router should automatically detect the new routes array and match /b
-    expect(document.getElementById("comp-b")).toBeTruthy();
+    expect(container.innerHTML).toContain('id="comp-b"');
 
     const CompC = component(() => $("div", { id: "comp-c", textContent: "Component C" }), "CompC");
     dynamicRoutes.value = [{ path: "/b", component: CompC }];
 
     // Router should automatically swap CompB with CompC at /b
-    expect(document.getElementById("comp-b")).toBeFalsy();
-    expect(document.getElementById("comp-c")).toBeTruthy();
+    expect(container.innerHTML).not.toContain('id="comp-b"');
+    expect(container.innerHTML).toContain('id="comp-c"');
   });
 
-  it("should support reactive fallback component", () => {
+  it("should support reactive wildcard component", () => {
     const Fallback1 = component(() => $("div", { id: "fallback-1", textContent: "Fallback 1" }), "Fallback1");
-    const Fallback2 = () => $("div", { id: "fallback-2", textContent: "Fallback 2" });
+    const Fallback2 = component(() => $("div", { id: "fallback-2", textContent: "Fallback 2" }), "Fallback2");
 
-    const dynamicFallback = new Seidr<ComponentFactoryFunction | undefined>(Fallback1);
-    const App = component(() => Router([], dynamicFallback), "App");
+    const dynamicFallback = new Seidr<ComponentFactoryFunction>(Fallback1);
+    const App = component(() => Router(dynamicFallback.as((f) => [{ path: "*", component: f }])), "App");
 
     const navigate = useNavigate();
     navigate("/unknown");
@@ -176,13 +185,13 @@ describeDualMode("Router Component", ({ getDocument }) => {
     expect(document.getElementById("fallback-1")).toBeTruthy();
 
     dynamicFallback.value = Fallback2;
-    expect(document.getElementById("fallback-1")).toBeFalsy();
-    expect(document.getElementById("fallback-2")).toBeTruthy();
+    expect(container.innerHTML).not.toContain('id="fallback-1"');
+    expect(container.innerHTML).toContain('id="fallback-2"');
   });
 
   it("should update element reference when navigating", () => {
     const r = Router([
-      { path: "/", component: Home },
+      { path: "/", component: Home, exact: true },
       { path: "/about", component: About },
     ]);
     const navigate = useNavigate();
@@ -192,5 +201,22 @@ describeDualMode("Router Component", ({ getDocument }) => {
 
     navigate("/about");
     expect((r.element as any).id).toContain("About");
+  });
+
+  it("should capture wildcard content in params", () => {
+    let capturedParams: any;
+    const WildcardComp = component(() => {
+      capturedParams = useRouteParams();
+      return $("div", { textContent: capturedParams.as((p: any) => `Path: ${p["*"]}`) });
+    });
+
+    const App = component(() => Router([{ path: "/admin/*", component: WildcardComp }]), "App");
+
+    const navigate = useNavigate();
+    unmount = mount(App, container);
+
+    navigate("/admin/settings/profile");
+    expect(capturedParams.value["*"]).toBe("settings/profile");
+    expect(container.textContent).toContain("Path: settings/profile");
   });
 });

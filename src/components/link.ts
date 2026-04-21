@@ -2,19 +2,21 @@ import {
   $,
   type Component,
   component,
+  isSeidr,
   type Seidr,
   type SeidrChild,
   type SeidrElementProps,
   unwrapSeidr,
 } from "@fimbul-works/seidr";
 import { useNavigate } from "../hooks/index.js";
+import { initRouter } from "../init-router.js";
 
 /**
  * Link component props.
  */
 export interface LinkProps<K extends keyof HTMLElementTagNameMap> {
   /** The route to navigate to */
-  to: string | Seidr<string>;
+  to: string | Seidr<string> | number;
   /** Optional HTML tag name (default: "a") */
   tagName?: K;
 }
@@ -32,9 +34,16 @@ export const Link = <K extends keyof HTMLElementTagNameMap = keyof HTMLElementTa
   children?: SeidrChild | SeidrChild[],
 ): Component =>
   component(() => {
+    initRouter();
+
+    // Disable hydration
+    if (isSeidr(to)) {
+      // to.options.hydrate = false;
+    }
+
     const navigate = useNavigate();
 
-    const el = $(
+    return $(
       tagName as K,
       {
         href: to,
@@ -46,6 +55,4 @@ export const Link = <K extends keyof HTMLElementTagNameMap = keyof HTMLElementTa
       } as SeidrElementProps<K>,
       children,
     );
-
-    return el;
   }, "Link")();

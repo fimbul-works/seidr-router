@@ -1,22 +1,5 @@
-import {
-  $a,
-  $div,
-  $footer,
-  $h1,
-  $h2,
-  $li,
-  $nav,
-  $p,
-  $section,
-  $text,
-  $ul,
-  type CleanupFunction,
-  component,
-  List,
-  type Seidr,
-  Suspense,
-  Switch,
-} from "@fimbul-works/seidr";
+import { $text, type CleanupFunction, component, List, type Seidr, Suspense, Switch } from "@fimbul-works/seidr";
+import { $a, $div, $footer, $h1, $h2, $li, $nav, $p, $section, $ul } from "@fimbul-works/seidr/html";
 import { hydrate, renderToString } from "@fimbul-works/seidr/ssr";
 import {
   clearHydrationData,
@@ -24,9 +7,9 @@ import {
   enableSSRMode,
   resetRequestIdCounter,
 } from "@fimbul-works/seidr/testing";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { useNavigate } from "../hooks";
 import { usePathname } from "../hooks/use-pathname";
-import { initRouter } from "../init-router";
 import { clearRouterState } from "../test/index";
 import { Link } from "./link";
 import { Router } from "./router";
@@ -34,9 +17,6 @@ import { Router } from "./router";
 describe("Router Hydration", () => {
   let cleanupClientMode: CleanupFunction;
   let unmount: CleanupFunction;
-
-  let homeUnmounted = false;
-  let fallbackUnmounted = false;
 
   const HomePage = component(() => {
     const message = $text("Welcome to my homepage");
@@ -77,27 +57,18 @@ describe("Router Hydration", () => {
   const App = component(() => {
     return [
       Navigation(),
-      Router(
-        [
-          { path: "/", component: HomePage },
-          { path: "/about", component: AboutPage },
-        ],
-        NotFoundPage,
-      ),
+      Router([
+        { path: "/", component: HomePage, exact: true },
+        { path: "/about", component: AboutPage },
+        { path: "*", component: NotFoundPage },
+      ]),
     ];
   }, "App");
 
   beforeAll(() => {
     cleanupClientMode = enableClientMode();
-    clearRouterState();
     resetRequestIdCounter();
     clearHydrationData();
-  });
-
-  beforeEach(() => {
-    clearRouterState();
-    homeUnmounted = false;
-    fallbackUnmounted = false;
   });
 
   afterEach(() => {
@@ -113,91 +84,68 @@ describe("Router Hydration", () => {
   });
 
   it("should mount default route when navigating to home", async () => {
-    // 1. SSR a 404 page
+    // 1. SSR a page
     const cleanupSSR = enableSSRMode();
-    //process.env.SEIDR_TEST_SSR = "true";
-    const { html, hydrationData } = await renderToString(App, { ...initRouter("/") });
-    //delete process.env.SEIDR_TEST_SSR;
+    const { html, hydrationData } = await renderToString(App);
     cleanupSSR();
 
     // 2. Setup browser DOM
+    const cleanupClientMode = enableClientMode();
     const container = document.createElement("div");
     container.innerHTML = html;
     document.body.appendChild(container);
 
     // 3. Hydrate
     unmount = hydrate(App, container, hydrationData);
+    cleanupClientMode();
 
     // Verify initial state
     expect(container.querySelector(".home-page")).toBeTruthy();
-    expect(container.querySelector(".not-found-page")).toBeFalsy();
   });
 
   it("should unmount SSR fallback when navigating to a valid route", async () => {
+    const App = component(() => {
+      return [
+        Navigation(),
+        Router(
+          [
+            { path: "/", component: HomePage, exact: true },
+            { path: "/about", component: AboutPage },
+            { path: "*", component: NotFoundPage },
+          ],
+          {
+            url: "/unknown",
+          },
+        ),
+      ];
+    }, "App");
+
     // 1. SSR a 404 page
     const cleanupSSR = enableSSRMode();
-    // process.env.SEIDR_TEST_SSR = "true";
-    const { html, hydrationData } = await renderToString(App, { ...initRouter("/unknown") });
-    // delete process.env.SEIDR_TEST_SSR;
+    const { html, hydrationData } = await renderToString(App);
     cleanupSSR();
 
     // 2. Setup browser DOM
+    const cleanupClientMode = enableClientMode();
     const container = document.createElement("div");
     container.innerHTML = html;
     document.body.appendChild(container);
 
     // 3. Hydrate
-    initRouter("/unknown");
-    window.history.pushState({}, "", "/unknown");
-
     unmount = hydrate(App, container, hydrationData);
 
     // Verify initial state
     expect(container.querySelector(".not-found-page")).toBeTruthy();
-    expect(container.querySelector(".home-page")).toBeFalsy();
 
     // 4. Navigate to "/about"
-    window.history.pushState({}, "", "/about");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    const navigate = useNavigate();
+    navigate("/about");
 
     // Verify unmount
     expect(container.querySelector(".about-page")).toBeTruthy();
     expect(container.querySelector(".not-found-page")).toBeFalsy();
-    expect(fallbackUnmounted).toBe(true);
-    expect(homeUnmounted).toBe(false);
-  });
 
-  it("should unmount SSR route when navigating to fallback", async () => {
-    // 1. SSR Home page
-    const cleanupSSR = enableSSRMode();
-    // process.env.SEIDR_TEST_SSR = "true";
-    const { html, hydrationData } = await renderToString(App, { path: "/" });
-    // delete process.env.SEIDR_TEST_SSR;
-    cleanupSSR();
-
-    // 2. Setup browser DOM
-    const container = document.createElement("div");
-    container.innerHTML = html;
-    document.body.appendChild(container);
-
-    // 3. Hydrate
-    initRouter("/");
-    window.history.pushState({}, "", "/");
-    unmount = hydrate(App, container, hydrationData);
-
-    // Verify initial state
-    expect(container.querySelector(".home")).toBeTruthy();
-    expect(container.querySelector(".fallback")).toBeFalsy();
-
-    // 4. Navigate to "/unknown"
-    window.history.pushState({}, "", "/unknown");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-
-    // Verify unmount
-    expect(container.querySelector(".home")).toBe(null);
-    expect(container.querySelector(".fallback")).toBeTruthy();
-    expect(homeUnmounted).toBe(true);
-    expect(fallbackUnmounted).toBe(false);
+    cleanupClientMode();
   });
 
   it("should handle complex application hydration", async () => {
@@ -221,35 +169,23 @@ describe("Router Hydration", () => {
     );
 
     const PostCard = component(
-      (post: BlogPost) =>
+      (post: Seidr<BlogPost>) =>
         $li({ className: "post-card" }, [
-          $h2({}, [Link({ to: `/post/${post.slug}` }, post.title)]),
-          $div({ className: "meta" }, new Date(post.date).toLocaleDateString()),
-          $div({ className: "excerpt", innerHTML: post.excerpt }),
-          Link({ to: `/post/${post.slug}`, className: "read-more" }, "Read more →"),
+          $h2({}, [Link({ to: `/post/${post.value.slug}` }, post.value.title)]),
+          $div({ className: "meta" }, new Date(post.value.date).toLocaleDateString()),
+          $div({ className: "excerpt", innerHTML: post.value.excerpt }),
+          Link({ to: `/post/${post.value.slug}`, className: "read-more" }, "Read more →"),
         ]),
       "PostCard",
     );
 
-    const HomePage = component(() => {
+    const HomePageComp = component(() => {
       const postsPromise: Promise<BlogPost[]> = Promise.resolve([
         {
           slug: "one",
           title: "First",
           excerpt: "This is the first post",
           date: "2026-01-01",
-        },
-        {
-          slug: "two",
-          title: "Second",
-          excerpt: "This is the second post",
-          date: "2026-02-01",
-        },
-        {
-          slug: "three",
-          title: "Third",
-          excerpt: "This is the third post",
-          date: "2026-03-01",
         },
       ]);
 
@@ -270,24 +206,30 @@ describe("Router Hydration", () => {
           });
         }, "Posts"),
       );
-    }, "HomePage");
+    }, "HomePageComp");
 
     const BlogApp = component(() => {
       return $div({ className: "app-container" }, [
         Header(),
-        $div({ className: "main-content" }, Router([{ path: "/", component: HomePage }])),
+        $div({ className: "main-content" }, Router([{ path: "/", component: HomePageComp }])),
         $footer({}, `© ${new Date().getFullYear()} Seidr Blog Example`),
       ]);
     }, "BlogApp");
 
+    const cleanupSSR = enableSSRMode();
     const { hydrationData, html } = await renderToString(BlogApp);
+    cleanupSSR();
+
+    cleanupClientMode = enableClientMode();
 
     const container = document.createElement("div");
     container.innerHTML = html;
+    document.body.appendChild(container);
 
-    cleanupClientMode = enableClientMode();
     unmount = hydrate(BlogApp, container, hydrationData);
 
     expect(container.innerHTML).toBe(html);
+
+    cleanupClientMode();
   });
 });

@@ -1,66 +1,39 @@
-import { type CleanupFunction, getAppState, Seidr } from "@fimbul-works/seidr";
-import { describeDualMode, enableClientMode, enableSSRMode } from "@fimbul-works/seidr/testing";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { DATA_KEY_ROUTER_URL, DUMMY_BASE_URL } from "./constants";
-import { initRouter } from "./init-router";
+import { getAppState } from "@fimbul-works/seidr";
+import { beforeEach, describe, expect, it } from "vitest";
+import { DATA_KEY_ROUTER } from "./constants.js";
+import { initRouter } from "./init-router.js";
+import type { RouterState } from "./types.js";
 
-describeDualMode("initRouter", ({ isSSR }) => {
-  let cleanup: CleanupFunction;
-
+describe("initRouter()", () => {
   beforeEach(() => {
-    cleanup = isSSR ? enableSSRMode() : enableClientMode();
+    getAppState().deleteData(DATA_KEY_ROUTER);
   });
 
-  afterEach(() => {
-    cleanup?.();
-    vi.restoreAllMocks();
+  it("should initialize default state in browser", () => {
+    // Note: window.location.href is available in JSDOM
+    initRouter();
+
+    expect(getAppState().hasData(DATA_KEY_ROUTER)).toBe(true);
+    const routerState = getAppState().getData<RouterState>(DATA_KEY_ROUTER)!;
+
+    expect(routerState.url.value.href).toMatch(/http:\/\/localhost|https:\/\/fimbul\.works/);
+    expect(routerState.tree).toBeInstanceOf(Map);
+    expect(routerState.popstateListeners).toBeInstanceOf(Set);
   });
 
-  it("should initialize router with a string URL", () => {
-    const url = "/user";
-    const data = initRouter(url);
+  it("should initialize with custom URL", () => {
+    initRouter("http://example.com/test?a=1");
 
-    expect(data).toEqual({
-      [DATA_KEY_ROUTER_URL]: `${DUMMY_BASE_URL}${url}`,
-    });
+    const routerState = getAppState().getData<RouterState>(DATA_KEY_ROUTER)!;
+    expect(routerState.url.value.href).toBe("http://example.com/test?a=1");
+    expect(routerState.url.value.pathname).toBe("/test");
+    expect(routerState.url.value.searchParams.get("a")).toBe("1");
   });
 
-  it("should initialize router with a URL object", () => {
-    const url = new URL("/user", DUMMY_BASE_URL);
-    const data = initRouter(url);
+  it("should handle relative URL with base", () => {
+    initRouter("/foo", "http://base.com");
 
-    expect(data).toEqual({
-      [DATA_KEY_ROUTER_URL]: url.href,
-    });
+    const routerState = getAppState().getData<RouterState>(DATA_KEY_ROUTER)!;
+    expect(routerState.url.value.href).toBe("http://base.com/foo");
   });
-
-  it("should initialize router with a Location object", () => {
-    const url = window.location;
-    const data = initRouter(url);
-
-    expect(data).toEqual({
-      [DATA_KEY_ROUTER_URL]: window.location.href,
-    });
-  });
-
-  it("should setup AppState with observable value", () => {
-    const url = "/user";
-    initRouter(url);
-
-    const urlSeidr = getAppState().getData(DATA_KEY_ROUTER_URL);
-    expect(urlSeidr).toBeInstanceOf(Seidr);
-    expect((urlSeidr as Seidr).value).toBeInstanceOf(URL);
-    expect((urlSeidr as Seidr).value.href).toBe(new URL(url, DUMMY_BASE_URL).href);
-  });
-
-  if (!isSSR) {
-    it("should update URL on popstate event", () => {
-      const addEventListenerSpy = vi.spyOn(window, "addEventListener");
-
-      const url = "/user";
-      initRouter(url);
-
-      expect(addEventListenerSpy).toHaveBeenCalledWith("popstate", expect.any(Function));
-    });
-  }
 });

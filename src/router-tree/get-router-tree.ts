@@ -1,16 +1,10 @@
-import { getAppState, SeidrError } from "@fimbul-works/seidr";
-import { DATA_KEY_ROUTER_TREE } from "../constants.js";
+import { getRouterState } from "../get-router-state.js";
 import type { RouterTreeNode } from "../types.js";
 
 /**
- * Get the current URL as a Seidr observable.
+ * Get the current router tree.
  *
  * @returns {Map<string, RouterTreeNode>} The the router tree
+ * @throws {SeidrError} If the router is not initialized
  */
-export function getRouterTree(): Map<string, RouterTreeNode> {
-  // @ts-expect-error
-  if (__SEIDR_DEV__ && !getAppState().hasData(DATA_KEY_ROUTER_TREE)) {
-    throw new SeidrError("Router is not initialized");
-  }
-  return getAppState().getData<Map<string, RouterTreeNode>>(DATA_KEY_ROUTER_TREE)!;
-}
+export const getRouterTree = (): Map<string, RouterTreeNode> => getRouterState().tree;

@@ -1,54 +1,94 @@
-import { getAppState, isClient, isStr, noHydrate, Seidr } from "@fimbul-works/seidr";
-import { DATA_KEY_ROUTER, DATA_KEY_ROUTER_TREE, DATA_KEY_ROUTER_URL, DUMMY_BASE_URL } from "./constants.js";
+import { getAppState, getRootComponent, isClient, isStr, Seidr, SeidrError } from "@fimbul-works/seidr";
+import { DATA_KEY_ROUTER, DUMMY_BASE_URL, SEIDR_ID_ROUTER_URL } from "./constants.js";
+import { browserRouter } from "./router/browser-router.js";
+import type { PopstateListener, RouterState, RouterTreeNode } from "./types.js";
 
 /**
  * Initialize the router state.
  * Use the spread operator with renderToString and hydrate to prepare the router.
  *
- * @param {string | URL | Location} url
+ * @param {string | URL | Location} initialUrl - Initial URL for the router (default: current window location or "/")
+ * @param {string} [base=DUMMY_BASE_URL] - Base URL for resolving relative URLs, default `DUMMY_BASE_URL`
  * @returns {Record<string, any>} Initial state for the router
  */
-export const initRouter = (url: string | URL | Location = isClient() ? window.location.href : "/") => {
-  // Normalize URL
-  if (isStr(url)) {
-    url = new URL(url, DUMMY_BASE_URL);
-  } else if (isClient() && typeof Location !== "undefined" && url instanceof Location) {
-    url = new URL(url.href);
+export const initRouter = (
+  initialUrl?: string | URL | Location,
+  base: string = isClient() ? window.location.href : DUMMY_BASE_URL,
+) => {
+  /**
+   * Normalize the initial URL input to a URL object.
+   * @param {string | URL | Location} url
+   * @returns {URL} Normalized URL object
+   * @throws {SeidrError} If the input URL is invalid
+   */
+  const getUrlObject = (url: string | URL | Location): URL => {
+    if (url instanceof URL) {
+      return url;
+    }
+
+    if (isStr(url)) {
+      return new URL(url, base);
+    }
+
+    if (isClient() && typeof Location !== "undefined" && url instanceof Location) {
+      return new URL(url.href, base);
+    }
+
+    throw new SeidrError("Invalid URL provided to initRouter");
+  };
+
+  const appState = getAppState();
+  if (appState.hasData(DATA_KEY_ROUTER)) {
+    if (initialUrl !== undefined) {
+      appState.getData<RouterState>(DATA_KEY_ROUTER)!.url.value = getUrlObject(initialUrl);
+    }
+    return;
   }
 
-  // Define AppState
-  const observable = new Seidr(url, { ...noHydrate, id: DATA_KEY_ROUTER_URL });
-  const state = getAppState();
-  state.setData(DATA_KEY_ROUTER_URL, observable);
-  state.setData(DATA_KEY_ROUTER_TREE, new Map<string, any>());
+  // Fallback to default if not provided
+  if (initialUrl === undefined) {
+    initialUrl = isClient() ? window.location.href : "/";
+  }
+
+  const url = new Seidr<URL>(getUrlObject(initialUrl), { id: SEIDR_ID_ROUTER_URL, hydrate: false });
+  const popstateListeners = new Set<PopstateListener>();
+
+  // Define event handlers for URL changes
+  const popstate = () => (url.value = new URL(window.location.href, base));
 
   // Setup event listeners for client-side navigation
-  const popstate = () => (observable.value = new URL(window.location.href));
   if (isClient()) {
     window.addEventListener("popstate", popstate);
   }
 
-  // Define data strategy for the router
-  state.defineDataStrategy<string>(
-    DATA_KEY_ROUTER,
-    // Capture function: store the URL as a string for hydration
-    () => observable.value.href,
-    // Restore function: convert the string back to a URL object
-    (url) => {
-      if (isStr(url)) {
-        observable.value = new URL(url, DUMMY_BASE_URL);
-      }
-      // @ts-expect-error
-      else if (__SEIDR_DEV__) {
-        console.warn("[seidr-router] Missing router state captured during hydration");
-      }
-    },
-    // Cleanup function: remove event listeners when the router is destroyed
-    () => isClient() && window.removeEventListener("popstate", popstate),
-  );
+  // Observe URL changes and notify listeners
+  const cleanup = url.observe((url) => popstateListeners.forEach((fn) => fn(url.pathname + url.search)));
 
-  // Return initial state
-  return {
-    [DATA_KEY_ROUTER]: url.href,
-  };
+  // Cleanup on unmount
+  if (process.env.VITEST) {
+    try {
+      getRootComponent()?.onUnmount(cleanup);
+    } catch {}
+  } else {
+    getRootComponent()?.onUnmount(cleanup);
+  }
+
+  // Store state in AppState
+  appState.setData<RouterState>(DATA_KEY_ROUTER, {
+    url,
+    tree: new Map<string, RouterTreeNode>(),
+    parentMap: new Map<string, RouterTreeNode>(),
+    popstateListeners,
+  });
+
+  // Eagerly initialize the browser router singleton
+  browserRouter();
+
+  appState.defineDataStrategy<string>(
+    DATA_KEY_ROUTER,
+    // Capture function: store current URL and other serializable state
+    () => url.value.href,
+    // Restore function: restore URL from captured data
+    (urlStr: string) => (url.value = new URL(urlStr, base)),
+  );
 };

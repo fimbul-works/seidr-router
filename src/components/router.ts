@@ -3,71 +3,136 @@ import {
   type ComponentFactoryFunction,
   component,
   getLastNode,
-  isFn,
+  isSeidr,
   mountComponent,
-  noHydrate,
-  type Seidr,
+  Seidr,
   useScope,
   wrapComponent,
   wrapSeidr,
 } from "@fimbul-works/seidr";
-import { useParams, usePathname } from "../hooks/index.js";
+import { getRouterState } from "../get-router-state.js";
+import { initRouter } from "../init-router.js";
 import { matchRoute } from "../match-route.js";
-import type { RouteDefinition } from "../types";
+import { browserRouter } from "../router/browser-router.js";
+import { getNearestRouter } from "../router-tree/get-nearest-router.js";
+import { registerRouter } from "../router-tree/register-router.js";
+import type { Route, RouteMatch, RouterInterface } from "../types";
 
 /**
- * Router component props.
+ * Router component options.
  */
-export interface RouterProps<C extends ComponentFactoryFunction = ComponentFactoryFunction> {
-  routes: Array<RouteDefinition> | Seidr<Array<RouteDefinition>>;
-  fallback?: C | Seidr<C | undefined>;
+export interface RouterOptions {
+  router?: RouterInterface;
+  url?: string | URL;
 }
 
 /**
- * Router component - renders the first matching route or a fallback.
+ * Router component - renders the first matching route.
+ * Use a wildcard route ("*") as the last entry for fallback behavior.
+ *
+ * @param {Array<Route> | Seidr<Array<Route>>} routes - Array of route definitions or a Seidr that resolves to it
+ * @param {RouterOptions} [options={}] - Optional router options. If not provided, browserRouter() will be used.
+ * @param {string} [name="Router"] - Optional name for the component (used for debugging)
+ * @returns {Component} The Router component instance
  */
-export const Router = <C extends ComponentFactoryFunction = ComponentFactoryFunction>(
-  routes: Array<RouteDefinition> | Seidr<Array<RouteDefinition>>,
-  fallback?: C | Seidr<C | undefined>,
+export const Router = (
+  routes: Array<Route> | Seidr<Array<Route>>,
+  options: RouterOptions = {},
+  name: string = "Router",
 ): Component =>
-  component(({ routes: routesProp, fallback: fallbackProp }: RouterProps<C>) => {
+  component(() => {
+    initRouter(options.url);
+
     const routerComponent = useScope()!;
-    const routes = wrapSeidr(routesProp, noHydrate);
-    const fallback = wrapSeidr(fallbackProp, noHydrate);
-    const currentPath = usePathname();
-    const currentParams = useParams();
+    const routesObservable = wrapSeidr(routes, { hydrate: false });
+    const routerInstance = options.router || browserRouter();
+    const parentNode = getNearestRouter();
 
-    let currentComponent: Component | undefined;
-    let currentFactory: ComponentFactoryFunction | undefined;
-    let currentRouteIndex = -100;
+    // Disable hydration for routes
+    if (isSeidr(routesObservable)) {
+      routesObservable.options.hydrate = false;
+    }
 
-    const matchCurrentPath = (): { index: number; params: Record<string, string> } => {
-      const match = matchRoute(currentPath.value, routes.value);
-      return match
-        ? {
-            index: match.index,
-            params: match.params,
-          }
-        : { index: -1, params: {} };
-    };
+    // Calculate the matched path prefix from ancestors
+    let parentPrefix = "";
+    if (parentNode) {
+      // Find all ancestors and join their matched paths
+      // This allows nested routers to skip the portion of the path already consumed
+      let current = parentNode;
+      const prefixes = [current.matchedPath];
+      while (current.parentId) {
+        const state = getRouterState();
+        const parent = state.tree.get(current.parentId);
+        if (!parent) {
+          break;
+        }
+        prefixes.unshift(parent.matchedPath);
+        current = parent;
+      }
+      parentPrefix = prefixes.join("").replace(/\/+$/, "");
+    }
 
-    const getMatchedFactory = (index: number) =>
-      index > -1 ? routes.value[index].component : isFn(fallback.value) ? fallback.value : undefined;
+    // The local path is the router's pathname minus the prefix from parent routers
+    const currentPath = routerInstance.pathname.as((path) => {
+      if (path.startsWith(parentPrefix)) {
+        const local = path.slice(parentPrefix.length);
+        return local.startsWith("/") ? local : `/${local}`;
+      }
+      return "/";
+    });
 
+    const currentParams = new Seidr<Record<string, string>>({}, { hydrate: false });
+    let currentRouteIndex = -1;
+    let currentMatchedPath = "";
+    let currentComponent: Component | null = null;
+    let currentFactory: ComponentFactoryFunction | null = null;
+
+    /**
+     * Match the current path against the provided routes.
+     */
+    const matchCurrentPath = (): RouteMatch =>
+      matchRoute(currentPath.value, routesObservable.value) || { index: -1, params: {}, matchedPath: "" };
+
+    /**
+     * Get the component factory for the matched route index.
+     */
+    const getMatchedFactory = (index: number) => (index > -1 ? routesObservable.value[index].component : null);
+
+    /**
+     * Update the currently rendered component.
+     */
     const updateComponent = (index: number) => {
       currentFactory = getMatchedFactory(index);
-      if (currentFactory) {
-        currentComponent = wrapComponent(currentFactory, "Route")(undefined, routerComponent, currentPath.value);
-      } else {
-        currentComponent = undefined;
-      }
+      currentComponent = currentFactory
+        ? wrapComponent(currentFactory, `${name}Route`)(undefined, routerComponent)
+        : null;
     };
 
-    const { index: initialIndex, params: initialParams } = matchCurrentPath();
+    // Initial match
+    const {
+      index: initialIndex,
+      route: initialRoute,
+      params: initialParams,
+      matchedPath: initialMatched,
+    } = matchCurrentPath();
 
     if (initialIndex > -1 && initialParams) {
       currentRouteIndex = initialIndex;
+      currentParams.value = initialParams;
+      currentMatchedPath = initialMatched;
     }
+
+    // Register in the router tree BEFORE creating child components
+    const routerNode = registerRouter(routerComponent, {
+      component: routerComponent,
+      route: initialRoute,
+      router: routerInstance,
+      pathname: currentPath,
+      routerParams: currentParams,
+      childrenIds: new Set<string>(),
+      matchedPath: currentMatchedPath,
+    });
+
     updateComponent(currentRouteIndex);
 
     if (currentComponent) {
@@ -77,29 +142,39 @@ export const Router = <C extends ComponentFactoryFunction = ComponentFactoryFunc
       }
     }
 
-    const updateRoutes = () => {
-      const { index: matchedIndex, params: matchedParams } = matchCurrentPath();
+    /**
+     * Update the rendered route component.
+     */
+    const updateRoutes = (): void => {
+      const {
+        index: matchedIndex,
+        route: matchedRoute,
+        params: matchedParams,
+        matchedPath: matchedPathValue,
+      } = matchCurrentPath();
       const matchedFactory = getMatchedFactory(matchedIndex);
 
-      // If route hasn't changed, only update params and skip re-render
+      // Update node data even if component doesn't change
+      routerNode.matchedPath = matchedPathValue;
+      routerNode.route = matchedRoute;
+
       if (matchedFactory === currentFactory) {
         currentRouteIndex = matchedIndex;
+        currentParams.value = matchedParams;
         return;
       }
 
-      // 1. Resolve anchor point before unmounting
       const lastNode = currentComponent ? getLastNode(currentComponent) : null;
       const anchor = lastNode?.nextSibling || routerComponent.endMarker || null;
       const parent = lastNode?.parentNode || routerComponent.endMarker?.parentNode || routerComponent.parentNode;
 
-      // 2. Full swap
       if (currentComponent) {
         currentComponent.unmount();
-        currentComponent = undefined;
+        currentComponent = null;
       }
 
-      // Update index and parameters
       currentRouteIndex = matchedIndex;
+      currentParams.value = matchedParams;
       updateComponent(matchedIndex);
 
       if (currentComponent) {
@@ -107,15 +182,14 @@ export const Router = <C extends ComponentFactoryFunction = ComponentFactoryFunc
         routerComponent.element = currentComponent;
         mountComponent(currentComponent, anchor, parent!);
       } else {
-        routerComponent.element = undefined;
+        routerComponent.element = null;
       }
     };
 
+    routerComponent.element = currentComponent;
     routerComponent.onUnmount(currentPath.observe(updateRoutes));
-    routerComponent.onUnmount(routes.observe(updateRoutes));
-    routerComponent.onUnmount(fallback.observe(updateRoutes));
+    routerComponent.onUnmount(routesObservable.observe(updateRoutes));
     routerComponent.onUnmount(() => currentComponent?.unmount());
 
-    routerComponent.element = currentComponent;
     return currentComponent;
-  }, "Router")({ routes, fallback });
+  }, name)();

@@ -1,5 +1,5 @@
 import { isClient, isNum, SeidrError } from "@fimbul-works/seidr";
-import { getUrl } from "../get-url.js";
+import { getRouterState } from "../get-router-state.js";
 
 /**
  * Interface for the navigate function.
@@ -23,7 +23,7 @@ export const useNavigate = (): NavigateFn => {
     }
 
     // Handle string path
-    const observable = getUrl();
+    const observable = getRouterState().url;
     const url = observable.value;
     const nextUrl = new URL(to, url.href);
 
